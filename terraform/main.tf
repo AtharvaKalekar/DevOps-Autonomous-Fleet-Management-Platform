@@ -152,14 +152,14 @@ resource "aws_eks_node_group" "nodes" {
 # ==========================================
 # TELEMETRY DATA STREAM (AMAZON KINESIS)
 # ==========================================
-resource "aws_kinesis_stream" "telemetry_stream" {
-  name             = "fleet-telemetry-stream"
-  shard_count      = 4
-  retention_period = 24
-  tags = {
-    Environment = "production"
-  }
-}
+# resource "aws_kinesis_stream" "telemetry_stream" {
+#   name             = "fleet-telemetry-stream"
+#   shard_count      = 4
+#   retention_period = 24
+#   tags = {
+#     Environment = "production"
+#   }
+# }
 
 # ==========================================
 # STORAGE ARCHIVE (AMAZON S3)
@@ -181,68 +181,68 @@ resource "aws_s3_bucket_public_access_block" "private_s3_block" {
 }
 
 # ==========================================
-# IOT CORE INGESTION RULES
+# IOT CORE INGESTION RULES (Disabled - depends on Kinesis)
 # ==========================================
-resource "aws_iam_role" "iot_kinesis_role" {
-  name = "fleet-iot-kinesis-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "iot.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_policy" "iot_kinesis_policy" {
-  name        = "fleet-iot-kinesis-policy"
-  description = "Allows IoT rule to write to Kinesis stream"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action   = "kinesis:PutRecord"
-      Effect   = "Allow"
-      Resource = aws_kinesis_stream.telemetry_stream.arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "iot_kinesis_attach" {
-  policy_arn = aws_iam_policy.iot_kinesis_policy.arn
-  role       = aws_iam_role.iot_kinesis_role.name
-}
-
-resource "aws_iot_topic_rule" "telemetry_ingest" {
-  name        = "FleetTelemetryIngestRule"
-  description = "Ingests real-time GPS telemetry from autonomous vehicles into Kinesis"
-  enabled     = true
-  sql         = "SELECT * FROM 'fleet/+/telemetry'"
-  sql_version = "2016-03-23"
-
-  kinesis {
-    partition_key = "$${topic()}"
-    role_arn      = aws_iam_role.iot_kinesis_role.arn
-    stream_name   = aws_kinesis_stream.telemetry_stream.name
-  }
-}
+# resource "aws_iam_role" "iot_kinesis_role" {
+#   name = "fleet-iot-kinesis-role"
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [{
+#       Action = "sts:AssumeRole"
+#       Effect = "Allow"
+#       Principal = {
+#         Service = "iot.amazonaws.com"
+#       }
+#     }]
+#   })
+# }
+# 
+# resource "aws_iam_policy" "iot_kinesis_policy" {
+#   name        = "fleet-iot-kinesis-policy"
+#   description = "Allows IoT rule to write to Kinesis stream"
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [{
+#       Action   = "kinesis:PutRecord"
+#       Effect   = "Allow"
+#       Resource = aws_kinesis_stream.telemetry_stream.arn
+#     }]
+#   })
+# }
+# 
+# resource "aws_iam_role_policy_attachment" "iot_kinesis_attach" {
+#   policy_arn = aws_iam_policy.iot_kinesis_policy.arn
+#   role       = aws_iam_role.iot_kinesis_role.name
+# }
+# 
+# resource "aws_iot_topic_rule" "telemetry_ingest" {
+#   name        = "FleetTelemetryIngestRule"
+#   description = "Ingests real-time GPS telemetry from autonomous vehicles into Kinesis"
+#   enabled     = true
+#   sql         = "SELECT * FROM 'fleet/+/telemetry'"
+#   sql_version = "2016-03-23"
+# 
+#   kinesis {
+#     partition_key = "$${topic()}"
+#     role_arn      = aws_iam_role.iot_kinesis_role.arn
+#     stream_name   = aws_kinesis_stream.telemetry_stream.name
+#   }
+# }
 
 # ==========================================
-# MONITORING (CLOUDWATCH ALARMS)
+# MONITORING (CLOUDWATCH ALARMS - Disabled)
 # ==========================================
-resource "aws_cloudwatch_metric_alarm" "high_telemetry_errors" {
-  alarm_name          = "kinesis-high-error-rate"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "ReadProvisionedThroughputExceeded"
-  namespace           = "AWS/Kinesis"
-  period              = "60"
-  statistic           = "Sum"
-  threshold           = "10"
-  alarm_description   = "This alarm triggers if Kinesis stream experiences provisioned read capacity failures."
-  dimensions = {
-    StreamName = aws_kinesis_stream.telemetry_stream.name
-  }
-}
+# resource "aws_cloudwatch_metric_alarm" "high_telemetry_errors" {
+#   alarm_name          = "kinesis-high-error-rate"
+#   comparison_operator = "GreaterThanOrEqualToThreshold"
+#   evaluation_periods  = "1"
+#   metric_name         = "ReadProvisionedThroughputExceeded"
+#   namespace           = "AWS/Kinesis"
+#   period              = "60"
+#   statistic           = "Sum"
+#   threshold           = "10"
+#   alarm_description   = "This alarm triggers if Kinesis stream experiences provisioned read capacity failures."
+#   dimensions = {
+#     StreamName = aws_kinesis_stream.telemetry_stream.name
+#   }
+# }
