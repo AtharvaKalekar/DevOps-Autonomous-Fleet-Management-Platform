@@ -64,6 +64,44 @@ async function startServer() {
       res.json({ status: 'OK', timestamp: new Date() });
     });
 
+    // Prometheus Metrics Endpoint
+    app.get('/metrics', (req, res) => {
+      res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+      
+      let activeCount = 0;
+      let offlineCount = 0;
+      let maintenanceCount = 0;
+      
+      try {
+        if (simulator && simulator.vehicles) {
+          simulator.vehicles.forEach(v => {
+            if (v.status === 'active') activeCount++;
+            else if (v.status === 'offline') offlineCount++;
+            else if (v.status === 'maintenance') maintenanceCount++;
+          });
+        }
+      } catch (e) {
+        // Fallback
+      }
+
+      res.send(`# HELP up Target status
+# TYPE up gauge
+up 1
+
+# HELP fleet_vehicles_active Number of active vehicles
+# TYPE fleet_vehicles_active gauge
+fleet_vehicles_active ${activeCount}
+
+# HELP fleet_vehicles_offline Number of offline vehicles
+# TYPE fleet_vehicles_offline gauge
+fleet_vehicles_offline ${offlineCount}
+
+# HELP fleet_vehicles_maintenance Number of vehicles in maintenance
+# TYPE fleet_vehicles_maintenance gauge
+fleet_vehicles_maintenance ${maintenanceCount}
+`);
+    });
+
     // Global Error Handler
     app.use((err, req, res, next) => {
       console.error('Unhandled server error:', err);

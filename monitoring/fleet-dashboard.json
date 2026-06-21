@@ -94,7 +94,7 @@
         "y": 0
       },
       "id": 3,
-      "title": "Active Telemetry Samples Scraped",
+      "title": "Active Fleet Vehicles",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -107,7 +107,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "scrape_samples_scraped{job=\"fleet-backend\"}",
+          "expr": "fleet_vehicles_active{job=\"fleet-backend\"}",
           "instant": true,
           "range": false,
           "refId": "A"
