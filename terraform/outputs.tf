@@ -13,10 +13,10 @@ output "eks_cluster_endpoint" {
   value       = aws_eks_cluster.eks.endpoint
 }
 
-output "kinesis_stream_name" {
-  description = "Assigned Kinesis Ingest Stream Name"
-  value       = aws_kinesis_stream.telemetry_stream.name
-}
+# output "kinesis_stream_name" {
+#   description = "Assigned Kinesis Ingest Stream Name"
+#   value       = aws_kinesis_stream.telemetry_stream.name
+# }
 
 output "s3_archive_bucket_arn" {
   description = "Persistent telemetry logs bucket ARN reference"
