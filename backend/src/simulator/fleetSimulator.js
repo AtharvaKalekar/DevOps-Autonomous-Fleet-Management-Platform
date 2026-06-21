@@ -113,6 +113,7 @@ class FleetSimulator {
           low_fuel: false,
           engine_warning: false,
         },
+        lastAlertAt: {},
       };
     });
     console.log(`Loaded ${this.vehicles.length} vehicles into simulator state.`);
@@ -151,12 +152,12 @@ class FleetSimulator {
         if (vehicle.status !== 'offline') {
           vehicle.status = 'offline';
           vehicle.speed = 0;
-          alertService.createAlert({
-            vehicle_id: vehicle.id,
-            type: 'offline',
-            severity: 'critical',
-            message: `📡 Connection Lost: Regional outage detected in ${vehicle.region} for ${vehicle.name}`,
-          }).catch(err => console.error('Error creating outage alert:', err));
+          this.triggerAlert(
+            vehicle,
+            'offline',
+            'critical',
+            `📡 Connection Lost: Regional outage detected in ${vehicle.region} for ${vehicle.name}`
+          ).catch(err => console.error('Error creating outage alert:', err));
         } else {
           vehicle.status = 'offline';
           vehicle.speed = 0;
@@ -297,17 +298,39 @@ class FleetSimulator {
     }
   }
 
+  async triggerAlert(vehicle, type, severity, message) {
+    const now = Date.now();
+    if (!vehicle.lastAlertAt) {
+      vehicle.lastAlertAt = {};
+    }
+    const lastTime = vehicle.lastAlertAt[type];
+    if (lastTime && (now - lastTime < 60000)) {
+      // Cooldown active, skip creating/updating alert
+      return;
+    }
+    // Update last triggered timestamp
+    vehicle.lastAlertAt[type] = now;
+
+    // Call alertService
+    await alertService.createAlert({
+      vehicle_id: vehicle.id,
+      type,
+      severity,
+      message,
+    });
+  }
+
   async checkSensorAlerts(vehicle) {
     // A. Engine Warning Alert (temp > 100)
     if (vehicle.engine_temp > 100) {
       if (!vehicle.activeAlerts.engine_warning) {
         vehicle.activeAlerts.engine_warning = true;
-        await alertService.createAlert({
-          vehicle_id: vehicle.id,
-          type: 'engine_warning',
-          severity: 'critical',
-          message: `🚨 Engine temperature critical on ${vehicle.name}: ${Math.round(vehicle.engine_temp)}°C`,
-        });
+        await this.triggerAlert(
+          vehicle,
+          'engine_warning',
+          'critical',
+          `🚨 Engine temperature critical on ${vehicle.name}: ${Math.round(vehicle.engine_temp)}°C`
+        );
       }
     } else {
       vehicle.activeAlerts.engine_warning = false;
@@ -317,12 +340,12 @@ class FleetSimulator {
     if (vehicle.fuel_level < 20) {
       if (!vehicle.activeAlerts.low_fuel) {
         vehicle.activeAlerts.low_fuel = true;
-        await alertService.createAlert({
-          vehicle_id: vehicle.id,
-          type: 'low_fuel',
-          severity: 'medium',
-          message: `⚠️ Low fuel warning on ${vehicle.name}: ${Math.round(vehicle.fuel_level)}%`,
-        });
+        await this.triggerAlert(
+          vehicle,
+          'low_fuel',
+          'medium',
+          `⚠️ Low fuel warning on ${vehicle.name}: ${Math.round(vehicle.fuel_level)}%`
+        );
       }
     } else {
       vehicle.activeAlerts.low_fuel = false;
@@ -334,31 +357,31 @@ class FleetSimulator {
       if (alertChance < 0.33) {
         // Speeding alert
         if (vehicle.status === 'active' && vehicle.speed > 90) {
-          await alertService.createAlert({
-            vehicle_id: vehicle.id,
-            type: 'speeding',
-            severity: 'high',
-            message: `⚡ Speeding alert: ${vehicle.name} is traveling at ${Math.round(vehicle.speed)} km/h`,
-          });
+          await this.triggerAlert(
+            vehicle,
+            'speeding',
+            'high',
+            `⚡ Speeding alert: ${vehicle.name} is traveling at ${Math.round(vehicle.speed)} km/h`
+          );
         }
       } else if (alertChance < 0.66) {
         // Offline alert
         if (vehicle.status === 'offline') {
-          await alertService.createAlert({
-            vehicle_id: vehicle.id,
-            type: 'offline',
-            severity: 'medium',
-            message: `📡 Connection warning: ${vehicle.name} has gone offline.`,
-          });
+          await this.triggerAlert(
+            vehicle,
+            'offline',
+            'medium',
+            `📡 Connection warning: ${vehicle.name} has gone offline.`
+          );
         }
       } else {
         // Maintenance due alert
-        await alertService.createAlert({
-          vehicle_id: vehicle.id,
-          type: 'maintenance_due',
-          severity: 'low',
-          message: `🔧 Preventative Maintenance: ${vehicle.name} is due for scheduled service.`,
-        });
+        await this.triggerAlert(
+          vehicle,
+          'maintenance_due',
+          'low',
+          `🔧 Preventative Maintenance: ${vehicle.name} is due for scheduled service.`
+        );
       }
     }
   }

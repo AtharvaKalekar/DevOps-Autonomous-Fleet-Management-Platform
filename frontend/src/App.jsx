@@ -11,10 +11,12 @@ import Dashboard from './pages/Dashboard';
 import Vehicles from './pages/Vehicles';
 import Alerts from './pages/Alerts';
 import FleetMap from './components/Map/FleetMap';
+import VehicleDetailDrawer from './components/Panels/VehicleDetailDrawer';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { vehicles, setVehicles, alerts, setAlerts, connectionStatus } = useWebSocket();
+  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
 
   // Helper to remove alert from list when resolved in another component
   const handleResolveAlert = (id) => {
@@ -29,31 +31,42 @@ export default function App() {
             vehicles={vehicles}
             alerts={alerts}
             onResolveAlert={handleResolveAlert}
+            onSelectVehicle={setSelectedVehicleId}
           />
         );
       case 'livemap':
         return (
           <div className="space-y-4 h-[calc(100vh-10rem)]">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 tracking-wide uppercase">
+              <h1 className="text-2xl font-black text-textPrimary tracking-wide uppercase font-sans">
                 Live Fleet Map
               </h1>
-              <p className="text-xs text-slate-500 font-medium">
-                Real-time tracking of logistics vehicles globally
+              <p className="text-xs text-textSecondary font-semibold">
+                Real-time positioning and satellite tracking of global logistics assets
               </p>
             </div>
             <div className="flex-1 h-full min-h-[480px]">
-              <FleetMap vehicles={vehicles} height="h-full" />
+              <FleetMap 
+                vehicles={vehicles} 
+                height="h-full" 
+                onSelectVehicle={setSelectedVehicleId} 
+              />
             </div>
           </div>
         );
       case 'vehicles':
-        return <Vehicles vehicles={vehicles} setVehicles={setVehicles} />;
+        return (
+          <Vehicles 
+            vehicles={vehicles} 
+            setVehicles={setVehicles} 
+            onSelectVehicle={setSelectedVehicleId} 
+          />
+        );
       case 'alerts':
         return <Alerts alerts={alerts} setAlerts={setAlerts} />;
       default:
         return (
-          <div className="text-center text-slate-400 py-12 font-bold">
+          <div className="text-center text-textSecondary py-12 font-bold uppercase tracking-wider">
             Page not found.
           </div>
         );
@@ -61,7 +74,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-darkBg text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen bg-darkBg text-textPrimary flex flex-col font-sans transition-colors duration-300">
       {/* Top Navigation Bar */}
       <Navbar vehicles={vehicles} connectionStatus={connectionStatus} />
 
@@ -82,14 +95,23 @@ export default function App() {
         </main>
       </div>
 
+      {/* Slide-In Telemetry Details Panel */}
+      <VehicleDetailDrawer
+        vehicleId={selectedVehicleId}
+        vehicles={vehicles}
+        alerts={alerts}
+        setAlerts={setAlerts}
+        onClose={() => setSelectedVehicleId(null)}
+      />
+
       {/* Global Notification Toast Container */}
       <Toaster
         position="top-right"
         toastOptions={{
-          className: 'border border-slate-200 shadow-xl font-bold text-xs rounded-xl bg-white text-slate-800',
+          className: 'border border-panelBorder shadow-xl font-bold text-xs rounded-xl bg-panelBg text-textPrimary backdrop-blur-md',
           success: {
             iconTheme: {
-              primary: '#10b981',
+              primary: '#22c55e',
               secondary: '#fff',
             },
           },

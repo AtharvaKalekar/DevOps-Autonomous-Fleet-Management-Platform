@@ -5,6 +5,9 @@ const alertController = require('../controllers/alertController');
 // GET /api/alerts
 router.get('/', alertController.getUnresolvedAlerts);
 
+// PATCH /api/alerts/resolve-all
+router.patch('/resolve-all', alertController.resolveAllAlerts);
+
 // PATCH /api/alerts/:id/resolve
 router.patch('/:id/resolve', alertController.resolveAlert);
 

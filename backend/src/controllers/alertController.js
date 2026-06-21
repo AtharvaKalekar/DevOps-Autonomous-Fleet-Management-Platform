@@ -2,7 +2,14 @@ const alertService = require('../services/alertService');
 
 exports.getUnresolvedAlerts = async (req, res) => {
   try {
-    const alerts = await alertService.getUnresolved();
+    const resolvedParam = req.query.resolved;
+    let resolved = false; // default to false (unresolved)
+    if (resolvedParam === 'true') {
+      resolved = true;
+    } else if (resolvedParam === 'all') {
+      resolved = undefined;
+    }
+    const alerts = await alertService.getAlerts({ resolved });
     res.json({ success: true, data: alerts });
   } catch (error) {
     console.error('Error in getUnresolvedAlerts controller:', error);
@@ -19,6 +26,17 @@ exports.resolveAlert = async (req, res) => {
     res.json({ success: true, data: resolved });
   } catch (error) {
     console.error('Error in resolveAlert controller:', error);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+};
+
+exports.resolveAllAlerts = async (req, res) => {
+  try {
+    const { severity, vehicle_id } = req.body;
+    const resolved = await alertService.resolveAll({ severity, vehicle_id });
+    res.json({ success: true, data: resolved });
+  } catch (error) {
+    console.error('Error in resolveAllAlerts controller:', error);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 };

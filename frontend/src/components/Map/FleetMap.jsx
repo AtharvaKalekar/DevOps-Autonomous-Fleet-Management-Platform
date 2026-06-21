@@ -9,10 +9,22 @@ const STATUS_COLORS = {
   offline: '#ef4444',     // Red
 };
 
-export default function FleetMap({ vehicles, height = 'h-[500px]' }) {
+export default function FleetMap({ vehicles, height = 'h-[500px]', onSelectVehicle }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markersRef = useRef({}); // Stores mapping of vehicleId -> Leaflet CircleMarker
+  const markersRef = useRef({}); // Stores mapping of vehicleId -> Leaflet Marker
+
+  // Bind the global vehicle details click handler to window
+  useEffect(() => {
+    if (onSelectVehicle) {
+      window.openVehicleDetails = (id) => {
+        onSelectVehicle(id);
+      };
+    }
+    return () => {
+      delete window.openVehicleDetails;
+    };
+  }, [onSelectVehicle]);
 
   // Initialize Map (once)
   useEffect(() => {
@@ -28,8 +40,8 @@ export default function FleetMap({ vehicles, height = 'h-[500px]' }) {
       zoomControl: true,
     });
 
-    // Light Positron tile layer
-    L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', {
+    // Dark Matter tile layer
+    L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       subdomains: 'abcd',
       maxZoom: 20,
@@ -64,50 +76,64 @@ export default function FleetMap({ vehicles, height = 'h-[500px]' }) {
 
       // HTML template for the popup
       const popupHtml = `
-        <div class="p-2 space-y-2 select-none min-w-[200px]">
-          <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-1.5">
-            <span class="font-extrabold text-slate-800 text-sm">${name}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase" style="background-color: ${color}15; color: ${color}; border: 1px solid ${color}30">
+        <div class="p-2.5 space-y-2 select-none min-w-[210px] font-sans">
+          <div class="flex items-center justify-between border-b border-panelBorder/30 pb-2 mb-2">
+            <span class="font-black text-textPrimary text-sm tracking-tight">${name}</span>
+            <span class="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono" style="background-color: ${color}18; color: ${color}; border: 1px solid ${color}35">
               ${status}
             </span>
           </div>
-          <div class="grid grid-cols-2 gap-y-1.5 gap-x-2 text-xs">
-            <span class="text-slate-400 font-medium">Region:</span>
-            <span class="text-slate-700 font-bold text-right">${region}</span>
+          <div class="grid grid-cols-2 gap-y-1.5 gap-x-2 text-[11px]">
+            <span class="text-textSecondary font-semibold">Region:</span>
+            <span class="text-textPrimary font-extrabold text-right">${region}</span>
             
-            <span class="text-slate-400 font-medium">Speed:</span>
-            <span class="text-slate-700 font-bold text-right">${speed} km/h</span>
+            <span class="text-textSecondary font-semibold">Velocity:</span>
+            <span class="text-textPrimary font-bold text-right font-mono">${Math.round(speed)} km/h</span>
             
-            <span class="text-slate-400 font-medium">Fuel Level:</span>
-            <span class="text-slate-700 font-bold text-right" style="color: ${fuel_level < 20 ? '#ef4444' : '#1e293b'}">${fuel_level}%</span>
+            <span class="text-textSecondary font-semibold">Fuel Level:</span>
+            <span class="text-right font-mono font-bold" style="color: ${fuel_level < 20 ? '#ef4444' : 'var(--text-primary)'}">${Math.round(fuel_level)}%</span>
             
-            <span class="text-slate-400 font-medium">Engine Temp:</span>
-            <span class="text-slate-700 font-bold text-right" style="color: ${engine_temp > 100 ? '#ef4444' : '#1e293b'}">${engine_temp}°C</span>
+            <span class="text-textSecondary font-semibold">Engine Temp:</span>
+            <span class="text-right font-mono font-bold" style="color: ${engine_temp > 100 ? '#ef4444' : 'var(--text-primary)'}">${Math.round(engine_temp)}°C</span>
           </div>
-          <div class="border-t border-slate-200 pt-1.5 mt-1.5 text-[10px] text-slate-400 font-semibold truncate">
+          <div class="border-t border-panelBorder/30 pt-2 mt-2 text-[9px] text-textSecondary font-semibold truncate">
             Route: ${assigned_route}
           </div>
+          <button onclick="window.openVehicleDetails && window.openVehicleDetails('${id}')" class="w-full mt-2 bg-accentBlue hover:bg-accentHover text-white text-[10px] font-extrabold py-1.5 px-2 rounded-lg transition-all duration-150 shadow-sm uppercase tracking-wider block text-center">
+            Open Control Panel
+          </button>
         </div>
       `;
 
+      // Create glowing HTML divIcon
+      const markerHtml = `
+        <div class="relative flex items-center justify-center w-6 h-6">
+          ${status === 'active' ? `
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style="background-color: ${color}"></span>
+          ` : ''}
+          <span class="absolute inline-flex h-4.5 w-4.5 rounded-full opacity-40 blur-[2px]" style="background-color: ${color}; transform: scale(1.6);"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 border border-slate-900 shadow-md" style="background-color: ${color}"></span>
+        </div>
+      `;
+
+      const customIcon = L.divIcon({
+        html: markerHtml,
+        className: 'custom-leaflet-marker-wrapper',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -8],
+      });
+
       if (markersRef.current[id]) {
-        // Marker exists: update position, color and popup content
+        // Marker exists: update position, icon and popup content
         const marker = markersRef.current[id];
         marker.setLatLng([latitude, longitude]);
-        marker.setStyle({
-          color: color,
-          fillColor: color,
-        });
+        marker.setIcon(customIcon);
         marker.setPopupContent(popupHtml);
       } else {
         // Marker doesn't exist: create it
-        const marker = L.circleMarker([latitude, longitude], {
-          radius: 8,
-          fillColor: color,
-          color: color,
-          weight: 2,
-          opacity: 0.9,
-          fillOpacity: 0.6,
+        const marker = L.marker([latitude, longitude], {
+          icon: customIcon,
         });
 
         marker.bindPopup(popupHtml);
@@ -126,10 +152,10 @@ export default function FleetMap({ vehicles, height = 'h-[500px]' }) {
   }, [vehicles]);
 
   return (
-    <div className={`relative border border-panelBorder rounded-2xl overflow-hidden shadow-sm ${height} w-full`}>
-      <div className="absolute top-4 left-12 z-[1000] bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl border border-panelBorder shadow-sm">
-        <h4 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-2">Live Map Legend</h4>
-        <div className="flex flex-col space-y-1.5 text-[10px] text-slate-500 font-semibold">
+    <div className={`relative border border-panelBorder rounded-2xl overflow-hidden shadow-sm ${height} w-full transition-all duration-300`}>
+      <div className="absolute top-4 left-12 z-[1000] glass-panel px-3 py-2.5 rounded-xl border border-panelBorder shadow-md">
+        <h4 className="text-[9px] font-extrabold text-textPrimary uppercase tracking-widest mb-2">Live Map Legend</h4>
+        <div className="flex flex-col space-y-1.5 text-[10px] text-textSecondary font-bold">
           <div className="flex items-center space-x-2">
             <span className="h-2 w-2 rounded-full bg-[#10b981]" />
             <span>Active</span>

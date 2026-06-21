@@ -1,5 +1,38 @@
-import React from 'react';
-import { Truck, Play, Wrench, WifiOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Truck, Activity, Wrench, WifiOff, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+
+function AnimatedNumber({ value }) {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    let start = displayValue;
+    const end = value;
+    if (start === end) return;
+    
+    const duration = 600; // ms
+    const startTime = performance.now();
+
+    let animationFrameId;
+
+    function update(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out quad
+      const easeProgress = progress * (2 - progress);
+      const current = Math.round(start + (end - start) * easeProgress);
+      setDisplayValue(current);
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(update);
+      }
+    }
+
+    animationFrameId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [value]);
+
+  return <span className="font-mono font-black text-3xl tracking-tight text-textPrimary">{displayValue}</span>;
+}
 
 export default function StatsBar({ vehicles }) {
   const total = vehicles.length;
@@ -15,44 +48,52 @@ export default function StatsBar({ vehicles }) {
 
   const stats = [
     {
-      name: 'Total Vehicles',
+      name: 'Total Fleet Capacity',
       value: total,
       subText: 'Global Fleet Size',
       icon: Truck,
       percentage: totalPct,
       percentageLabel: '100% capacity',
-      color: 'from-blue-50/50 to-white border-blue-100 text-blue-600',
+      borderColor: 'border-l-blue-500',
+      iconColor: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
       progressColor: 'bg-blue-500',
+      trend: { text: '+0% this week', isUp: true }
     },
     {
-      name: 'Active Fleet',
+      name: 'Active Logistics',
       value: active,
       subText: `${idle} Idle / Standby`,
-      icon: Play,
+      icon: Activity,
       percentage: activePct,
       percentageLabel: `${activePct}% of total`,
-      color: 'from-green-50/50 to-white border-green-100 text-green-600',
+      borderColor: 'border-l-green-500',
+      iconColor: 'text-green-400 bg-green-500/10 border-green-500/20',
       progressColor: 'bg-green-500',
+      trend: { text: 'Optimal status', isUp: true }
     },
     {
-      name: 'In Maintenance',
+      name: 'Under Maintenance',
       value: maintenance,
       subText: 'Scheduled / Repair',
       icon: Wrench,
       percentage: maintPct,
       percentageLabel: `${maintPct}% of total`,
-      color: 'from-orange-50/50 to-white border-orange-100 text-orange-600',
-      progressColor: 'bg-orange-500',
+      borderColor: 'border-l-amber-500',
+      iconColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      progressColor: 'bg-amber-500',
+      trend: { text: '-2% reduction', isUp: true }
     },
     {
       name: 'Offline Units',
       value: offline,
-      subText: 'No Signal Received',
+      subText: 'No Telemetry Received',
       icon: WifiOff,
       percentage: offlinePct,
       percentageLabel: `${offlinePct}% of total`,
-      color: 'from-red-50/50 to-white border-red-100 text-red-600',
+      borderColor: 'border-l-red-500',
+      iconColor: 'text-red-400 bg-red-500/10 border-red-500/20',
       progressColor: 'bg-red-500',
+      trend: { text: '+1 unit lost', isUp: false }
     },
   ];
 
@@ -63,28 +104,36 @@ export default function StatsBar({ vehicles }) {
         return (
           <div
             key={idx}
-            className={`bg-gradient-to-br ${stat.color} border p-5 rounded-2xl flex flex-col justify-between shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-md h-40`}
+            className={`glass-panel border-l-4 ${stat.borderColor} p-5 rounded-2xl flex flex-col justify-between shadow-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg h-40`}
           >
             {/* Top row */}
             <div className="flex items-start justify-between">
               <div className="space-y-1">
-                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+                <span className="text-[10px] font-extrabold text-textSecondary uppercase tracking-widest block">
                   {stat.name}
                 </span>
-                <h3 className="text-3xl font-black text-slate-800">{stat.value}</h3>
+                <div className="flex items-baseline space-x-2">
+                  <AnimatedNumber value={stat.value} />
+                  {stat.trend && (
+                    <span className={`text-[10px] font-bold flex items-center ${stat.trend.isUp ? 'text-green-400' : 'text-red-400'}`}>
+                      {stat.trend.isUp ? <ArrowUpRight className="h-3 w-3 mr-0.5" /> : <ArrowDownRight className="h-3 w-3 mr-0.5" />}
+                      {stat.trend.text}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="bg-white p-2.5 rounded-xl border border-inherit shadow-sm">
-                <IconComponent className="h-5.5 w-5.5" />
+              <div className={`p-2.5 rounded-xl border shadow-sm ${stat.iconColor}`}>
+                <IconComponent className="h-5 w-5" />
               </div>
             </div>
 
             {/* Bottom progress metrics row */}
             <div className="space-y-2 mt-4">
-              <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
+              <div className="flex items-center justify-between text-[9px] text-textSecondary font-bold uppercase tracking-wider">
                 <span>{stat.subText}</span>
-                <span className="text-slate-500">{stat.percentageLabel}</span>
+                <span className="text-textPrimary font-mono">{stat.percentageLabel}</span>
               </div>
-              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200/20">
+              <div className="w-full bg-panelBorder h-1.5 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${stat.progressColor} transition-all duration-1000 ease-out`}
                   style={{ width: `${stat.percentage}%` }}

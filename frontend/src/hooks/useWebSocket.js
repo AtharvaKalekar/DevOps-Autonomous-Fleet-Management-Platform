@@ -98,6 +98,12 @@ export function useWebSocket(url = 'ws://localhost:4000') {
             setAlerts((prevAlerts) => prevAlerts.filter((a) => a.id !== payload.id));
             break;
 
+          case 'alert_updated':
+            setAlerts((prevAlerts) =>
+              prevAlerts.map((a) => (a.id === payload.id ? payload : a))
+            );
+            break;
+
           default:
             break;
         }

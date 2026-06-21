@@ -40,6 +40,13 @@ function initWebSocketServer(server) {
     });
   });
 
+  alertService.on('alert_updated', (updatedAlert) => {
+    broadcast({
+      type: 'alert_updated',
+      payload: updatedAlert,
+    });
+  });
+
   wss.on('connection', async (ws) => {
     console.log('New WebSocket client connected.');
 

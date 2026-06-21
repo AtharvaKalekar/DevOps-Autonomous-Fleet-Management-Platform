@@ -30,13 +30,18 @@ export const api = {
     return res.data;
   },
 
-  getAlerts: async () => {
-    const res = await client.get('/alerts');
+  getAlerts: async (resolved = 'false') => {
+    const res = await client.get(`/alerts?resolved=${resolved}`);
     return res.data;
   },
 
   resolveAlert: async (id) => {
     const res = await client.patch(`/alerts/${id}/resolve`);
+    return res.data;
+  },
+
+  resolveAllAlerts: async ({ severity, vehicle_id } = {}) => {
+    const res = await client.patch('/alerts/resolve-all', { severity, vehicle_id });
     return res.data;
   },
 

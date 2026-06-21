@@ -91,8 +91,16 @@ async function initDatabase() {
         severity alert_severity NOT NULL,
         message TEXT NOT NULL,
         resolved BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        occurrence_count INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT NOW()
       );
+    `);
+
+    // Ensure occurrence_count and updated_at exist for migration of existing tables
+    await client.query(`
+      ALTER TABLE alerts ADD COLUMN IF NOT EXISTS occurrence_count INTEGER DEFAULT 1;
+      ALTER TABLE alerts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
     `);
 
     console.log('PostgreSQL database schemas initialized successfully.');
