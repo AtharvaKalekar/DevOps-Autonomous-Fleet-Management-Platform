@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'node20'
+    }
+
     environment {
         DOCKER_REGISTRY      = "docker.io/admin"
         BACKEND_IMAGE        = "fleet-management-backend"
