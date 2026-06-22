@@ -1,144 +1,178 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Map, Truck, AlertTriangle } from 'lucide-react';
+import { Map, Truck, AlertTriangle, Home, LogOut, Sun, Moon, ChevronDown, Zap } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
-export default function Sidebar({ activeTab, setActiveTab, unresolvedCount }) {
+const PAGE_META = {
+  dashboard: {
+    title: 'Dashboard',
+    subtitle: 'Real-time fleet overview, health metrics, and live telemetry.',
+  },
+  livemap: {
+    title: 'Live Map',
+    subtitle: 'Track vehicle positions and status across all regions.',
+  },
+  vehicles: {
+    title: 'Vehicles',
+    subtitle: 'Browse, filter, and inspect your entire fleet inventory.',
+  },
+  alerts: {
+    title: 'Alerts',
+    subtitle: 'Monitor and resolve diagnostic alerts from active vehicles.',
+  },
+};
+
+export default function Sidebar({ activeTab, setActiveTab, unresolvedCount, connectionStatus, vehicles }) {
   const navItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+    { id: 'dashboard', name: 'Home', icon: Home },
     { id: 'livemap', name: 'Live Map', icon: Map },
     { id: 'vehicles', name: 'Vehicles', icon: Truck },
-    {
-      id: 'alerts',
-      name: 'Alerts',
-      icon: AlertTriangle,
-      badge: unresolvedCount > 0 ? unresolvedCount : null,
-    },
+    { id: 'alerts', name: 'Alerts', icon: AlertTriangle, badge: unresolvedCount > 0 ? unresolvedCount : null },
   ];
 
-  const [outages, setOutages] = useState({
-    'Asia': false,
-    'Europe': false,
-    'North America': false,
-  });
+  const [outages, setOutages] = useState({ Asia: false, Europe: false, 'North America': false });
+  const [chaosOpen, setChaosOpen] = useState(false);
+  const [theme, setTheme] = useState(() =>
+    typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  );
 
-  // Load initial simulator outages
+  const activeCount = vehicles.filter(v => v.status === 'active').length;
+  const outageCount = Object.values(outages).filter(Boolean).length;
+
   useEffect(() => {
-    const loadOutages = async () => {
-      try {
-        const res = await api.getOutages();
-        if (res.success) {
-          setOutages(res.data);
-        }
-      } catch (err) {
-        console.error('Failed to load simulator outages:', err);
-      }
-    };
-    loadOutages();
+    api.getOutages().then(res => { if (res.success) setOutages(res.data); }).catch(() => {});
   }, []);
 
-  // Outage Toggle Switch Trigger
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.classList.toggle('dark', next === 'dark');
+    setTheme(next);
+  };
+
   const handleToggleOutage = async (region) => {
     const nextVal = !outages[region];
     try {
       const res = await api.toggleOutage(region, nextVal);
       if (res.success) {
         setOutages(res.data);
-        if (nextVal) {
-          toast.error(`💥 Simulated outages triggered for region: ${region}! All devices disconnected.`, { duration: 4000 });
-        } else {
-          toast.success(`✅ Network connectivity recovered for region: ${region}. Devices reconnecting...`, { duration: 4000 });
-        }
+        toast[nextVal ? 'error' : 'success'](
+          nextVal ? `Outage triggered: ${region}` : `Recovered: ${region}`,
+          { duration: 3000 }
+        );
       }
-    } catch (err) {
-      console.error('Outage toggle failed:', err);
-      toast.error('Failed to toggle outage simulation.');
+    } catch {
+      toast.error('Failed to toggle outage.');
     }
   };
 
   return (
-    <aside className="w-64 bg-panelBg border-r border-panelBorder h-[calc(100vh-4rem)] flex flex-col justify-between select-none transition-all duration-300">
-      {/* Navigation Links */}
-      <div className="py-6 px-4 space-y-2">
-        <span className="text-[10px] font-extrabold text-textSecondary tracking-widest px-3 uppercase block">
-          Navigation
-        </span>
-        <nav className="space-y-1.5 mt-2">
+    <aside className="sidebar">
+      {/* Brand */}
+      <div className="sidebar-brand">
+        <div className="sidebar-logo">
+          <Truck className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <span className="sidebar-brand-name">AutoFleet</span>
+          <span className="sidebar-brand-sub">Ops Console</span>
+        </div>
+      </div>
+
+      {/* Navigation — always visible with outlines */}
+      <nav className="sidebar-nav">
+        <p className="sidebar-section-label">Menu</p>
+        <div className="sidebar-nav-list">
           {navItems.map((item) => {
-            const IconComponent = item.icon;
+            const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between py-3 rounded-lg text-sm font-semibold transition-all duration-200 border-l-4 ${
-                  isActive
-                    ? 'bg-accentBlue/10 text-accentBlue border-accentBlue px-2.5'
-                    : 'text-textSecondary border-transparent hover:bg-panelBg hover:text-textPrimary px-2.5'
-                }`}
+                className={`sidebar-nav-item ${isActive ? 'sidebar-nav-item-active' : ''}`}
               >
-                <div className="flex items-center space-x-3">
-                  <IconComponent className={`h-4.5 w-4.5 ${isActive ? 'text-accentBlue' : 'text-textSecondary'}`} />
+                <span className="sidebar-nav-item-inner">
+                  <Icon className="sidebar-nav-icon" />
                   <span>{item.name}</span>
-                </div>
-                {item.badge !== undefined && item.badge !== null && (
-                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                    isActive 
-                      ? 'bg-accentBlue text-white shadow-sm' 
-                      : 'bg-red-500 text-white pulse-live-badge'
-                  }`}>
+                </span>
+                {item.badge != null && (
+                  <span className={`sidebar-nav-badge ${isActive ? 'sidebar-nav-badge-active' : ''}`}>
                     {item.badge}
                   </span>
                 )}
               </button>
             );
           })}
-        </nav>
-      </div>
+        </div>
+      </nav>
 
-      {/* DevOps Chaos Outage Panel */}
-      <div className="px-4 py-4 border-t border-panelBorder space-y-3 bg-panelBg/20">
-        <span className="text-[10px] font-extrabold text-textSecondary tracking-widest px-3 uppercase block">
-          DevOps Chaos Engine
-        </span>
-        <div className="space-y-2">
-          {Object.keys(outages).map((region) => {
-            const isActive = outages[region];
-            return (
-              <div key={region} className="flex items-center justify-between px-3 py-2 bg-panelBg border border-panelBorder rounded-xl text-xs shadow-sm">
-                <span className="text-textSecondary font-bold">{region} Outage</span>
+      <div className="sidebar-spacer" />
+
+      {/* Chaos Engine */}
+      <div className="sidebar-chaos">
+        <button type="button" onClick={() => setChaosOpen(v => !v)} className="sidebar-chaos-toggle">
+          <span className="flex items-center gap-2 text-xs font-semibold text-textSecondary">
+            <Zap className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+            <span>Chaos Engine</span>
+            {outageCount > 0 && <span className="pill pill-danger">{outageCount}</span>}
+          </span>
+          <ChevronDown className={`h-3.5 w-3.5 text-textMuted transition-transform flex-shrink-0 ${chaosOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {chaosOpen && (
+          <div className="sidebar-chaos-body">
+            {Object.keys(outages).map((region) => (
+              <div key={region} className="flex items-center justify-between py-1.5 gap-2">
+                <span className="text-xs text-textSecondary font-medium truncate">{region}</span>
                 <button
+                  type="button"
                   onClick={() => handleToggleOutage(region)}
-                  className={`w-10 h-5 rounded-full relative transition-colors duration-200 border focus:outline-none ${
-                    isActive ? 'bg-red-500 border-red-600' : 'bg-panelBg border-panelBorder'
-                  }`}
-                  title={`Trigger outage in ${region}`}
+                  className={`sidebar-toggle ${outages[region] ? 'sidebar-toggle-on' : ''}`}
+                  aria-label={`Toggle outage for ${region}`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded-full absolute top-[2px] transition-all duration-200 shadow-sm ${
-                    isActive ? 'bg-white left-[22px]' : 'bg-textSecondary left-[3px]'
-                  }`} />
+                  <span className="sidebar-toggle-knob" />
                 </button>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Footer / System Health info */}
-      <div className="p-4 border-t border-panelBorder bg-panelBg/10">
-        <div className="bg-panelBg p-3 rounded-lg border border-panelBorder shadow-sm">
-          <div className="flex items-center justify-between text-[11px] text-textSecondary mb-1.5 font-bold uppercase">
-            <span>Simulation Server</span>
-            <span className="text-green-500 font-extrabold">ONLINE</span>
+      {/* Footer */}
+      <div className="sidebar-footer">
+        <div className="sidebar-status">
+          <span
+            className={`live-dot ${connectionStatus === 'connected' ? 'connected' : ''}`}
+            style={{
+              background: connectionStatus === 'connected' ? 'var(--success-color)' :
+                connectionStatus === 'connecting' ? 'var(--warning-color)' : 'var(--danger-color)',
+            }}
+          />
+          <span className="text-xs text-textMuted capitalize">{connectionStatus}</span>
+          <span className="text-textMuted text-xs">·</span>
+          <span className="text-xs font-mono font-semibold text-textPrimary tabular-nums">
+            {activeCount}/{vehicles.length}
+          </span>
+        </div>
+
+        <div className="sidebar-user">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="avatar">OA</div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-textPrimary truncate leading-tight">Ops Admin</p>
+              <button type="button" onClick={toggleTheme} className="sidebar-theme-btn">
+                {theme === 'dark' ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
+                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              </button>
+            </div>
           </div>
-          <div className="w-full bg-panelBorder h-1.5 rounded-full overflow-hidden">
-            <div className="bg-green-500 h-full w-[100%] animate-pulse" />
-          </div>
-          <p className="text-[9px] text-textSecondary mt-2 text-center font-semibold">
-            Logistics Autonomous Agent Network
-          </p>
+          <button type="button" className="sidebar-logout-btn" aria-label="Log out">
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>
   );
 }
+
+export { PAGE_META };

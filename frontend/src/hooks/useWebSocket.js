@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
+import api from '../services/api';
 
 export function useWebSocket(url = 'ws://localhost:4000') {
   const [vehicles, setVehicles] = useState([]);
@@ -7,6 +8,20 @@ export function useWebSocket(url = 'ws://localhost:4000') {
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    const fetchInitialAlerts = async () => {
+      try {
+        const res = await api.getAlerts('false');
+        if (res.success) {
+          setAlerts(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial alerts:', err);
+      }
+    };
+    fetchInitialAlerts();
+  }, []);
 
   const connect = () => {
     setConnectionStatus('connecting');

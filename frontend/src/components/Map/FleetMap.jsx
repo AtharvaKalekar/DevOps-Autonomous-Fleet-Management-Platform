@@ -1,178 +1,100 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import LegendRow from '../ui/LegendRow';
 
 const STATUS_COLORS = {
-  active: '#10b981',      // Green
-  idle: '#f59e0b',        // Yellow
-  maintenance: '#f97316', // Orange
-  offline: '#ef4444',     // Red
+  active: '#16a34a',
+  idle: '#ca8a04',
+  maintenance: '#ea580c',
+  offline: '#dc2626',
 };
 
 export default function FleetMap({ vehicles, height = 'h-[500px]', onSelectVehicle }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markersRef = useRef({}); // Stores mapping of vehicleId -> Leaflet Marker
+  const markersRef = useRef({});
 
-  // Bind the global vehicle details click handler to window
   useEffect(() => {
-    if (onSelectVehicle) {
-      window.openVehicleDetails = (id) => {
-        onSelectVehicle(id);
-      };
-    }
-    return () => {
-      delete window.openVehicleDetails;
-    };
+    if (onSelectVehicle) window.openVehicleDetails = (id) => onSelectVehicle(id);
+    return () => { delete window.openVehicleDetails; };
   }, [onSelectVehicle]);
 
-  // Initialize Map (once)
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Start centered at (30, 0) with zoom level 2
     const map = L.map(mapContainerRef.current, {
-      center: [30, 0],
-      zoom: 2,
-      minZoom: 1.5,
-      maxBounds: [[-90, -180], [90, 180]],
-      maxBoundsViscosity: 1.0,
+      center: [30, 0], zoom: 2, minZoom: 1.5,
+      maxBounds: [[-90, -180], [90, 180]], maxBoundsViscosity: 1.0,
       zoomControl: true,
     });
 
-    // Dark Matter tile layer
-    L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OSM &copy; CARTO',
+      subdomains: 'abcd', maxZoom: 20,
     }).addTo(map);
 
     mapRef.current = map;
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
+    return () => { mapRef.current?.remove(); mapRef.current = null; };
   }, []);
 
-  // Update Markers when vehicles data changes
   useEffect(() => {
     if (!mapRef.current) return;
+    const map = mapRef.current;
+    const activeIds = new Set();
 
-    const currentMap = mapRef.current;
-    const activeVehicleIds = new Set();
+    vehicles.forEach((v) => {
+      const { id, name, latitude, longitude, speed, fuel_level, engine_temp, status, region, assigned_route } = v;
+      if (latitude == null || longitude == null || isNaN(latitude)) return;
 
-    vehicles.forEach((vehicle) => {
-      const { id, name, latitude, longitude, speed, fuel_level, engine_temp, status, region, assigned_route } = vehicle;
-      
-      // If latitude and longitude are missing or null, don't show on map
-      if (latitude === null || longitude === null || isNaN(latitude) || isNaN(longitude)) return;
+      activeIds.add(id);
+      const color = STATUS_COLORS[status] || '#6b7280';
 
-      activeVehicleIds.add(id);
-
-      const color = STATUS_COLORS[status] || '#64748b';
-
-      // HTML template for the popup
-      const popupHtml = `
-        <div class="p-2.5 space-y-2 select-none min-w-[210px] font-sans">
-          <div class="flex items-center justify-between border-b border-panelBorder/30 pb-2 mb-2">
-            <span class="font-black text-textPrimary text-sm tracking-tight">${name}</span>
-            <span class="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono" style="background-color: ${color}18; color: ${color}; border: 1px solid ${color}35">
-              ${status}
-            </span>
+      const popup = `
+        <div style="padding:12px;font-family:inherit;min-width:200px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #e5e7eb">
+            <strong style="font-size:14px;color:#111">${name}</strong>
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${color}18;color:${color};text-transform:capitalize">${status}</span>
           </div>
-          <div class="grid grid-cols-2 gap-y-1.5 gap-x-2 text-[11px]">
-            <span class="text-textSecondary font-semibold">Region:</span>
-            <span class="text-textPrimary font-extrabold text-right">${region}</span>
-            
-            <span class="text-textSecondary font-semibold">Velocity:</span>
-            <span class="text-textPrimary font-bold text-right font-mono">${Math.round(speed)} km/h</span>
-            
-            <span class="text-textSecondary font-semibold">Fuel Level:</span>
-            <span class="text-right font-mono font-bold" style="color: ${fuel_level < 20 ? '#ef4444' : 'var(--text-primary)'}">${Math.round(fuel_level)}%</span>
-            
-            <span class="text-textSecondary font-semibold">Engine Temp:</span>
-            <span class="text-right font-mono font-bold" style="color: ${engine_temp > 100 ? '#ef4444' : 'var(--text-primary)'}">${Math.round(engine_temp)}°C</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:#6b7280;margin-bottom:10px">
+            <span>Region</span><span style="text-align:right;color:#111;font-weight:500">${region}</span>
+            <span>Speed</span><span style="text-align:right;color:#111;font-family:monospace">${Math.round(speed)} km/h</span>
+            <span>Fuel</span><span style="text-align:right;color:${fuel_level < 20 ? '#dc2626' : '#111'};font-family:monospace">${Math.round(fuel_level)}%</span>
+            <span>Temp</span><span style="text-align:right;color:${engine_temp > 100 ? '#dc2626' : '#111'};font-family:monospace">${Math.round(engine_temp)}°C</span>
           </div>
-          <div class="border-t border-panelBorder/30 pt-2 mt-2 text-[9px] text-textSecondary font-semibold truncate">
-            Route: ${assigned_route}
-          </div>
-          <button onclick="window.openVehicleDetails && window.openVehicleDetails('${id}')" class="w-full mt-2 bg-accentBlue hover:bg-accentHover text-white text-[10px] font-extrabold py-1.5 px-2 rounded-lg transition-all duration-150 shadow-sm uppercase tracking-wider block text-center">
-            Open Control Panel
+          <p style="font-size:10px;color:#9ca3af;margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${assigned_route}</p>
+          <button onclick="window.openVehicleDetails&&window.openVehicleDetails('${id}')"
+            style="width:100%;padding:8px;background:#111;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+            View details
           </button>
-        </div>
-      `;
+        </div>`;
 
-      // Create glowing HTML divIcon
-      const markerHtml = `
-        <div class="relative flex items-center justify-center w-6 h-6">
-          ${status === 'active' ? `
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style="background-color: ${color}"></span>
-          ` : ''}
-          <span class="absolute inline-flex h-4.5 w-4.5 rounded-full opacity-40 blur-[2px]" style="background-color: ${color}; transform: scale(1.6);"></span>
-          <span class="relative inline-flex rounded-full h-3 w-3 border border-slate-900 shadow-md" style="background-color: ${color}"></span>
-        </div>
-      `;
-
-      const customIcon = L.divIcon({
-        html: markerHtml,
-        className: 'custom-leaflet-marker-wrapper',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-        popupAnchor: [0, -8],
+      const icon = L.divIcon({
+        html: `<div style="position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center">
+          <span style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25)"></span>
+        </div>`,
+        className: '', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -10],
       });
 
       if (markersRef.current[id]) {
-        // Marker exists: update position, icon and popup content
-        const marker = markersRef.current[id];
-        marker.setLatLng([latitude, longitude]);
-        marker.setIcon(customIcon);
-        marker.setPopupContent(popupHtml);
+        const m = markersRef.current[id];
+        m.setLatLng([latitude, longitude]);
+        m.setIcon(icon);
+        m.setPopupContent(popup);
       } else {
-        // Marker doesn't exist: create it
-        const marker = L.marker([latitude, longitude], {
-          icon: customIcon,
-        });
-
-        marker.bindPopup(popupHtml);
-        marker.addTo(currentMap);
-        markersRef.current[id] = marker;
+        markersRef.current[id] = L.marker([latitude, longitude], { icon }).bindPopup(popup).addTo(map);
       }
     });
 
-    // Remove any markers for vehicles that are no longer in the list
-    Object.keys(markersRef.current).forEach((id) => {
-      if (!activeVehicleIds.has(id)) {
-        markersRef.current[id].remove();
-        delete markersRef.current[id];
-      }
+    Object.keys(markersRef.current).forEach(id => {
+      if (!activeIds.has(id)) { markersRef.current[id].remove(); delete markersRef.current[id]; }
     });
   }, [vehicles]);
 
   return (
-    <div className={`relative border border-panelBorder rounded-2xl overflow-hidden shadow-sm ${height} w-full transition-all duration-300`}>
-      <div className="absolute top-4 left-12 z-[1000] glass-panel px-3 py-2.5 rounded-xl border border-panelBorder shadow-md">
-        <h4 className="text-[9px] font-extrabold text-textPrimary uppercase tracking-widest mb-2">Live Map Legend</h4>
-        <div className="flex flex-col space-y-1.5 text-[10px] text-textSecondary font-bold">
-          <div className="flex items-center space-x-2">
-            <span className="h-2 w-2 rounded-full bg-[#10b981]" />
-            <span>Active</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-2 w-2 rounded-full bg-[#f59e0b]" />
-            <span>Idle</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-2 w-2 rounded-full bg-[#f97316]" />
-            <span>Maintenance</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="h-2 w-2 rounded-full bg-[#ef4444]" />
-            <span>Offline</span>
-          </div>
-        </div>
+    <div className={`relative ${height} w-full`}>
+      <div className="map-legend">
+        <LegendRow />
       </div>
       <div ref={mapContainerRef} className="h-full w-full" />
     </div>

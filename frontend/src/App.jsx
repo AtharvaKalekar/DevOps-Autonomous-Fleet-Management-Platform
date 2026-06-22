@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useWebSocket } from './hooks/useWebSocket';
-
-// Layout Components
-import Navbar from './components/Layout/Navbar';
-import Sidebar from './components/Layout/Sidebar';
-
-// Pages
+import Sidebar, { PAGE_META } from './components/Layout/Sidebar';
+import PageHeader from './components/ui/PageHeader';
 import Dashboard from './pages/Dashboard';
 import Vehicles from './pages/Vehicles';
 import Alerts from './pages/Alerts';
@@ -18,10 +14,12 @@ export default function App() {
   const { vehicles, setVehicles, alerts, setAlerts, connectionStatus } = useWebSocket();
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
 
-  // Helper to remove alert from list when resolved in another component
   const handleResolveAlert = (id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
+
+  const meta = PAGE_META[activeTab] || PAGE_META.dashboard;
+  const activeCount = vehicles.filter(v => v.status === 'active').length;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -36,66 +34,69 @@ export default function App() {
         );
       case 'livemap':
         return (
-          <div className="space-y-4 h-[calc(100vh-10rem)]">
-            <div>
-              <h1 className="text-2xl font-black text-textPrimary tracking-wide uppercase font-sans">
-                Live Fleet Map
-              </h1>
-              <p className="text-xs text-textSecondary font-semibold">
-                Real-time positioning and satellite tracking of global logistics assets
-              </p>
-            </div>
-            <div className="flex-1 h-full min-h-[480px]">
-              <FleetMap 
-                vehicles={vehicles} 
-                height="h-full" 
-                onSelectVehicle={setSelectedVehicleId} 
-              />
-            </div>
+          <div className="squire-card squire-card-static overflow-hidden animate-fade-in">
+            <FleetMap
+              vehicles={vehicles}
+              height="h-[calc(100vh-220px)] min-h-[480px]"
+              onSelectVehicle={setSelectedVehicleId}
+            />
           </div>
         );
       case 'vehicles':
         return (
-          <Vehicles 
-            vehicles={vehicles} 
-            setVehicles={setVehicles} 
-            onSelectVehicle={setSelectedVehicleId} 
+          <Vehicles
+            vehicles={vehicles}
+            setVehicles={setVehicles}
+            onSelectVehicle={setSelectedVehicleId}
           />
         );
       case 'alerts':
         return <Alerts alerts={alerts} setAlerts={setAlerts} />;
       default:
-        return (
-          <div className="text-center text-textSecondary py-12 font-bold uppercase tracking-wider">
-            Page not found.
-          </div>
-        );
+        return <div className="empty-state"><p className="text-textMuted">Page not found.</p></div>;
     }
   };
 
   return (
-    <div className="min-h-screen bg-darkBg text-textPrimary flex flex-col font-sans transition-colors duration-300">
-      {/* Top Navigation Bar */}
-      <Navbar vehicles={vehicles} connectionStatus={connectionStatus} />
+    <div className="min-h-screen bg-darkBg text-textPrimary flex font-sans">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        unresolvedCount={alerts.length}
+        connectionStatus={connectionStatus}
+        vehicles={vehicles}
+      />
 
-      {/* Main Panel Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Side Navigation Panel */}
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          unresolvedCount={alerts.length}
-        />
+      <main className="flex-1 overflow-y-auto min-h-screen">
+        <div className="max-w-[1440px] mx-auto px-6 lg:px-10 py-8">
+          <PageHeader title={meta.title} subtitle={meta.subtitle}>
+            <div className="flex items-center gap-2">
+              <span className={`live-dot ${connectionStatus === 'connected' ? 'connected' : ''}`}
+                style={{
+                  background: connectionStatus === 'connected' ? 'var(--success-color)' :
+                    connectionStatus === 'connecting' ? 'var(--warning-color)' : 'var(--danger-color)'
+                }}
+              />
+              <span className="text-xs font-medium text-textSecondary capitalize hidden sm:inline">
+                {connectionStatus}
+              </span>
+              <span className="hidden sm:inline text-textMuted">·</span>
+              <span className="text-xs font-semibold text-textPrimary font-mono hidden sm:inline">
+                {activeCount}/{vehicles.length} active
+              </span>
+            </div>
+          </PageHeader>
 
-        {/* Dynamic Content Panel */}
-        <main className="flex-1 overflow-y-auto p-6 bg-darkBg">
-          <div className="max-w-7xl mx-auto h-full">
+          <div className="animate-fade-in" style={{ animationDelay: '0.05s', animationFillMode: 'both' }}>
             {renderContent()}
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
 
-      {/* Slide-In Telemetry Details Panel */}
+      {selectedVehicleId && (
+        <div className="drawer-overlay animate-fade-overlay" onClick={() => setSelectedVehicleId(null)} />
+      )}
+
       <VehicleDetailDrawer
         vehicleId={selectedVehicleId}
         vehicles={vehicles}
@@ -104,23 +105,12 @@ export default function App() {
         onClose={() => setSelectedVehicleId(null)}
       />
 
-      {/* Global Notification Toast Container */}
       <Toaster
         position="top-right"
         toastOptions={{
-          className: 'border border-panelBorder shadow-xl font-bold text-xs rounded-xl bg-panelBg text-textPrimary backdrop-blur-md',
-          success: {
-            iconTheme: {
-              primary: '#22c55e',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
+          className: 'border border-panelBorder shadow-card-lg font-medium text-sm rounded-xl bg-panelBg text-textPrimary',
+          success: { iconTheme: { primary: '#16a34a', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#dc2626', secondary: '#fff' } },
         }}
       />
     </div>

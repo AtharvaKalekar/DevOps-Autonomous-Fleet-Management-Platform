@@ -1,46 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Check, Loader, ShieldCheck, RefreshCw, Search, X, CheckSquare } from 'lucide-react';
+import { Check, Loader, ShieldCheck, RefreshCw, Search, X, CheckSquare } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import StatusPill from '../components/ui/StatusPill';
 
-const SEVERITY_BADGES = {
-  critical: 'bg-red-500/10 border-red-500/30 text-red-400',
-  high: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
-  medium: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
-  low: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-};
-
-export default function Alerts({ alerts, setAlerts }) {
+export default function Alerts({ alerts: globalAlerts, setAlerts: setGlobalAlerts }) {
+  const [localAlerts, setLocalAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [resolvingId, setResolvingId] = useState(null);
-
-  // Filters & Search State
-  const [statusFilter, setStatusFilter] = useState('false'); // 'false' = unresolved, 'true' = resolved, 'all' = all
+  const [statusFilter, setStatusFilter] = useState('false');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch alerts from API
   const fetchAlerts = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await api.getAlerts(statusFilter);
-      if (res.success) {
-        setAlerts(res.data);
+    if (statusFilter === 'false') {
+      if (!silent) setLoading(true);
+      try {
+        const res = await api.getAlerts('false');
+        if (res.success) {
+          setGlobalAlerts(res.data);
+        }
+      } catch {
+        if (!silent) toast.error('Failed to sync alerts.');
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to fetch alerts:', err);
-      if (!silent) toast.error('Failed to sync alerts feed.');
-    } finally {
-      if (!silent) setLoading(false);
+    } else {
+      if (!silent) setLoading(true);
+      try {
+        const res = await api.getAlerts(statusFilter);
+        if (res.success) {
+          setLocalAlerts(res.data);
+        }
+      } catch {
+        if (!silent) toast.error('Failed to sync alerts.');
+      } finally {
+        if (!silent) setLoading(false);
+      }
     }
   };
 
-  // Poll alerts every 5 seconds, and refetch when statusFilter changes
+  useEffect(() => {
+    if (statusFilter === 'false') {
+      setLocalAlerts(globalAlerts);
+    }
+  }, [globalAlerts, statusFilter]);
+
   useEffect(() => {
     fetchAlerts();
-    const interval = setInterval(() => {
-      fetchAlerts(true);
-    }, 5000);
+    const interval = setInterval(() => fetchAlerts(true), 5000);
     return () => clearInterval(interval);
   }, [statusFilter]);
 
@@ -49,11 +57,11 @@ export default function Alerts({ alerts, setAlerts }) {
     try {
       const res = await api.resolveAlert(id);
       if (res.success) {
-        toast.success('Alert resolved successfully.');
-        setAlerts((prev) => prev.filter((a) => a.id !== id));
+        toast.success('Alert resolved.');
+        setGlobalAlerts(prev => prev.filter(a => a.id !== id));
+        setLocalAlerts(prev => prev.map(a => a.id === id ? { ...a, resolved: true } : a));
       }
-    } catch (err) {
-      console.error('Failed to resolve alert:', err);
+    } catch {
       toast.error('Could not resolve alert.');
     } finally {
       setResolvingId(null);
@@ -64,245 +72,150 @@ export default function Alerts({ alerts, setAlerts }) {
     setLoading(true);
     try {
       const severity = severityFilter === 'all' ? null : severityFilter;
-      
-      // Smart detection of target vehicle_id: if all filtered alerts belong to the same vehicle
       let vehicle_id = null;
-      if (searchQuery.trim() !== '') {
-        const uniqueVehicleIds = [...new Set(filteredAlerts.map(a => a.vehicle_id))];
-        if (uniqueVehicleIds.length === 1) {
-          vehicle_id = uniqueVehicleIds[0];
-        }
+      if (searchQuery.trim()) {
+        const ids = [...new Set(filteredAlerts.map(a => a.vehicle_id))];
+        if (ids.length === 1) vehicle_id = ids[0];
       }
-
       const res = await api.resolveAllAlerts({ severity, vehicle_id });
       if (res.success) {
-        toast.success(`Successfully resolved matching alerts.`);
+        toast.success('Alerts resolved.');
         fetchAlerts();
       }
-    } catch (err) {
-      console.error('Resolve all failed:', err);
+    } catch {
       toast.error('Failed to resolve alerts.');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDateTime = (timestamp) => {
-    const d = new Date(timestamp);
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-  };
-
-  // Client-side filtering
-  const filteredAlerts = alerts.filter((alert) => {
-    // 1. Severity filter
-    if (severityFilter !== 'all' && alert.severity !== severityFilter) {
-      return false;
-    }
-    // 2. Search query filter (vehicle name, ID, or alert message)
-    if (searchQuery.trim() !== '') {
-      const query = searchQuery.toLowerCase();
-      const nameMatch = alert.vehicle_name?.toLowerCase().includes(query);
-      const idMatch = alert.vehicle_id?.toLowerCase().includes(query);
-      const msgMatch = alert.message?.toLowerCase().includes(query);
-      if (!nameMatch && !idMatch && !msgMatch) {
-        return false;
-      }
+  const filteredAlerts = localAlerts.filter((alert) => {
+    if (severityFilter !== 'all' && alert.severity !== severityFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        alert.vehicle_name?.toLowerCase().includes(q) ||
+        alert.vehicle_id?.toLowerCase().includes(q) ||
+        alert.message?.toLowerCase().includes(q)
+      );
     }
     return true;
   });
 
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-textPrimary tracking-wide uppercase flex items-center space-x-2.5">
-            <AlertTriangle className="h-6 w-6 text-red-500 animate-pulse" />
-            <span>Alerts Control Console</span>
-          </h1>
-          <p className="text-xs text-textSecondary font-semibold mt-1">
-            Real-time diagnostics and telemetry alerts generated by the active fleet simulator
-          </p>
-        </div>
-        <div className="flex items-center space-x-3 self-end sm:self-center">
-          {statusFilter === 'false' && filteredAlerts.length > 0 && (
-            <button
-              onClick={handleResolveAll}
-              disabled={loading}
-              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-2 transition-all duration-200 shadow-md disabled:opacity-50"
-            >
-              <CheckSquare className="h-4 w-4" />
-              <span>Resolve Current Filters</span>
-            </button>
-          )}
-          <button
-            onClick={() => fetchAlerts()}
-            disabled={loading}
-            className="bg-panelBg hover:bg-accentBlue/10 border border-panelBorder p-2 rounded-xl text-textSecondary hover:text-accentBlue transition-all disabled:opacity-50 shadow-sm"
-            title="Manual Refresh"
-          >
-            <RefreshCw className={`h-4.5 w-4.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
+  const fmt = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' +
+      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
-      {/* Search & Filter Options Bar */}
-      <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Search Field */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-textSecondary" />
+  return (
+    <div className="space-y-4">
+      <div className="squire-card squire-card-static p-4 flex flex-col md:flex-row md:items-center gap-3">
+        <div className="relative flex-1 md:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-textMuted pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by Vehicle Name, ID, or message..."
+            placeholder="Search alerts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-panelBorder bg-panelBg text-textPrimary text-xs focus:outline-none focus:border-accentBlue/50 transition-all placeholder:text-textSecondary/50 font-semibold"
+            className="ui-input w-full pl-9 pr-9"
           />
           {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-3.5 text-textSecondary hover:text-textPrimary"
-            >
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-textMuted hover:text-textPrimary">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
-
-        {/* Filters Dropdown */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Status Filter */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[10px] uppercase font-bold text-textSecondary tracking-wider">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-panelBorder bg-panelBg text-textPrimary text-xs focus:outline-none focus:border-accentBlue/50 font-bold"
-            >
-              <option value="false">Unresolved Only</option>
-              <option value="true">Resolved History</option>
-              <option value="all">All Logs</option>
-            </select>
-          </div>
-
-          {/* Severity Filter */}
-          <div className="flex items-center space-x-2">
-            <span className="text-[10px] uppercase font-bold text-textSecondary tracking-wider">Severity:</span>
-            <select
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-panelBorder bg-panelBg text-textPrimary text-xs focus:outline-none focus:border-accentBlue/50 font-bold"
-            >
-              <option value="all">All Severities</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="ui-select">
+            <option value="false">Unresolved</option>
+            <option value="true">Resolved</option>
+            <option value="all">All</option>
+          </select>
+          <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="ui-select">
+            <option value="all">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2 md:ml-auto">
+          {statusFilter === 'false' && filteredAlerts.length > 0 && (
+            <button onClick={handleResolveAll} disabled={loading} className="btn-primary">
+              <CheckSquare className="h-4 w-4" />
+              Resolve all
+            </button>
+          )}
+          <button onClick={() => fetchAlerts()} disabled={loading} className="btn-ghost" title="Refresh">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
-      {/* Main Console Table */}
-      <div className="glass-panel rounded-2xl overflow-hidden shadow-sm select-none">
-        {loading ? (
-          <div className="py-28 flex flex-col items-center justify-center space-y-3">
-            <Loader className="h-8 w-8 text-accentBlue animate-spin" />
-            <span className="text-xs text-textSecondary font-extrabold tracking-wider uppercase">Querying active alerts stream...</span>
+      <div className="squire-card squire-card-static overflow-hidden">
+        {loading && filteredAlerts.length === 0 ? (
+          <div className="empty-state py-20">
+            <Loader className="h-7 w-7 text-accentBlue animate-spin" />
+            <p className="text-sm text-textMuted">Loading alerts...</p>
           </div>
         ) : filteredAlerts.length === 0 ? (
-          <div className="py-24 flex flex-col items-center justify-center text-center p-6 space-y-4">
-            <div className="bg-green-500/10 border border-green-500/20 p-5 rounded-full text-green-400">
-              <ShieldCheck className="h-12 w-12" />
-            </div>
-            <div>
-              <p className="text-base font-extrabold text-textPrimary">All Warnings Clear</p>
-              <p className="text-xs text-textSecondary max-w-sm mt-1.5 mx-auto font-semibold">
-                No alerts match the selected filters. Global systems are currently operating under optimal parameters.
-              </p>
-            </div>
+          <div className="empty-state py-20">
+            <div className="empty-state-icon"><ShieldCheck className="h-7 w-7" /></div>
+            <p className="text-sm font-semibold text-textPrimary">All clear</p>
+            <p className="text-xs text-textMuted">No alerts match your filters.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="table-wrap">
+            <table className="data-table">
               <thead>
-                <tr className="border-b border-panelBorder bg-panelBg/20 text-[10px] font-extrabold uppercase tracking-widest text-textSecondary">
-                  <th className="py-4.5 px-6">Severity</th>
-                  <th className="py-4.5 px-5">Vehicle Name / ID</th>
-                  <th className="py-4.5 px-5">Alert Type</th>
-                  <th className="py-4.5 px-5">Diagnostic Message</th>
-                  <th className="py-4.5 px-5">Timestamp</th>
-                  {statusFilter !== 'true' && <th className="py-4.5 px-6 text-right">Action</th>}
+                <tr>
+                  <th>Severity</th>
+                  <th>Vehicle</th>
+                  <th>Type</th>
+                  <th>Message</th>
+                  <th>Time</th>
+                  {statusFilter !== 'true' && <th style={{ textAlign: 'right' }}>Action</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-panelBorder/30 text-xs text-textSecondary font-semibold">
-                {filteredAlerts.map((alert) => {
-                  const severityClass = SEVERITY_BADGES[alert.severity] || 'bg-panelBg border-panelBorder text-textSecondary';
-                  
-                  return (
-                    <tr key={alert.id} className="hover:bg-panelBg/20 transition-colors">
-                      {/* Severity */}
-                      <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase border ${severityClass}`}>
-                          {alert.severity}
-                        </span>
-                      </td>
-                      
-                      {/* Vehicle */}
-                      <td className="py-4 px-5">
-                        <span className="font-extrabold text-textPrimary">{alert.vehicle_name}</span>
-                        <span className="block text-[9px] text-textSecondary font-mono mt-0.5 truncate max-w-[150px]">
-                          {alert.vehicle_id}
-                        </span>
-                      </td>
-                      
-                      {/* Alert Type */}
-                      <td className="py-4 px-5 font-mono text-[10px] uppercase font-bold text-textPrimary/80">
-                        {alert.type.replace('_', ' ')}
-                      </td>
-                      
-                      {/* Message & Occurrence Count badge */}
-                      <td className="py-4 px-5 text-textPrimary font-semibold">
-                        <div className="flex items-center">
-                          <span>{alert.message}</span>
-                          {alert.occurrence_count > 1 && (
-                            <span className="ml-2 px-1.5 py-0.5 text-[10px] font-black bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg animate-pulse font-mono">
-                              ×{alert.occurrence_count}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      
-                      {/* Timestamp (using JetBrains Mono font-mono for technical data) */}
-                      <td className="py-4 px-5 font-mono text-[10px] text-textSecondary">
-                        {formatDateTime(alert.updated_at || alert.created_at)}
-                      </td>
-                      
-                      {/* Action */}
-                      {statusFilter !== 'true' && (
-                        <td className="py-4 px-6 text-right">
-                          {alert.resolved ? (
-                            <span className="text-[10px] font-extrabold text-green-500 uppercase tracking-wider bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-xl">
-                              Resolved
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleResolve(alert.id)}
-                              disabled={resolvingId === alert.id}
-                              className="bg-green-500/10 hover:bg-green-600 border border-green-500/20 text-green-400 hover:text-white font-black px-3 py-1.5 rounded-xl flex items-center space-x-1.5 ml-auto transition-all duration-150 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {resolvingId === alert.id ? (
-                                <span className="block h-3.5 w-3.5 border-2 border-t-transparent border-slate-700 rounded-full animate-spin" />
-                              ) : (
-                                <Check className="h-3.5 w-3.5" />
-                              )}
-                              <span className="text-[10px] uppercase tracking-wider">Resolve</span>
-                            </button>
-                          )}
-                        </td>
+              <tbody>
+                {filteredAlerts.map((alert) => (
+                  <tr key={alert.id}>
+                    <td><StatusPill status={alert.severity} /></td>
+                    <td>
+                      <div className="font-semibold text-textPrimary">{alert.vehicle_name}</div>
+                      <div className="text-[11px] text-textMuted font-mono truncate max-w-[140px]">{alert.vehicle_id}</div>
+                    </td>
+                    <td className="font-mono text-[11px] uppercase">{alert.type.replace('_', ' ')}</td>
+                    <td className="text-textPrimary max-w-xs">
+                      <span className="line-clamp-2">{alert.message}</span>
+                      {alert.occurrence_count > 1 && (
+                        <span className="ml-1 text-[10px] font-bold text-red-500 font-mono">×{alert.occurrence_count}</span>
                       )}
-                    </tr>
-                  );
-                })}
+                    </td>
+                    <td className="font-mono text-[11px] tabular-nums whitespace-nowrap">{fmt(alert.updated_at || alert.created_at)}</td>
+                    {statusFilter !== 'true' && (
+                      <td style={{ textAlign: 'right' }}>
+                        {alert.resolved ? (
+                          <span className="pill pill-success">Resolved</span>
+                        ) : (
+                          <button
+                            onClick={() => handleResolve(alert.id)}
+                            disabled={resolvingId === alert.id}
+                            className="btn-secondary text-xs py-1.5 px-3"
+                          >
+                            {resolvingId === alert.id ? (
+                              <span className="block h-3.5 w-3.5 border-2 border-t-transparent border-accentBlue rounded-full animate-spin" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5" />
+                            )}
+                            Resolve
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
