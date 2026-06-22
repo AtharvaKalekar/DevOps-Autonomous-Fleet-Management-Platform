@@ -82,7 +82,7 @@ services:
     image: hashicorp/vault:1.13.3
     container_name: fleet_vault
     restart: always
-    mem_limit: 64m
+    mem_limit: 128m
     ports:
       - "8200:8200"
     environment:
