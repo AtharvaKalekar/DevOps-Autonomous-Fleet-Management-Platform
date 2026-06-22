@@ -11,9 +11,14 @@ const vaultService = require('./services/vaultService');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Enable CORS for frontend running on localhost:3000
+// Enable CORS for frontend running on localhost:3000 or Vite dev port 5173
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
+  ],
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
